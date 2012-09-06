@@ -1,9 +1,15 @@
 using System;
 using Craft.Net.Server;
+using System.Linq;
 using System.Net;
-using Craft.Net.Server.Worlds;
-using Craft.Net.Server.Worlds.Generation;
+using Craft.Net.Data;
+using Craft.Net.Data.Generation;
+using Craft.Net.Server.Channels;
 using Craft.Net.Server.Events;
+using System.Reflection;
+using Craft.Net.Data.Blocks;
+using System.IO;
+using Craft.Net.Server.Packets;
 
 namespace Craft.Net.Server.Test
 {
@@ -17,18 +23,25 @@ namespace Craft.Net.Server.Test
             minecraftServer = new MinecraftServer(
 		        new IPEndPoint(IPAddress.Any, 25565));
             minecraftServer.OnlineMode = false;
-            minecraftServer.EncryptionEnabled = false;
+            minecraftServer.EncryptionEnabled = true;
             // Add a console logger
             minecraftServer.AddLogProvider(new ConsoleLogWriter(LogImportance.High));
             minecraftServer.AddLogProvider(new FileLogWriter("packetLog.txt", LogImportance.Low));
             // Add a flatland world
-            minecraftServer.AddWorld(new World(new DebugGenerator()));
+#if DEBUG
+            // Use a fresh world each time
+            if (Directory.Exists("world"))
+                Directory.Delete("world", true);
+#endif
+            minecraftServer.AddLevel(new Level(Path.Combine(Directory.GetCurrentDirectory(), "world")));
+            //minecraftServer.DefaultLevel.GameMode = GameMode.Creative;
             // Register the chat handler
-            minecraftServer.OnChatMessage += HandleOnChatMessage;
+            minecraftServer.ChatMessage += HandleOnChatMessage;
             // Start the server
             minecraftServer.Start();
             Console.WriteLine("Press any key to exit.");
-            Console.ReadKey(true);
+            while (Console.ReadKey(true).Key != ConsoleKey.Q)
+		        continue;
             // Stop the server
             minecraftServer.Stop();
         }
@@ -55,6 +68,30 @@ namespace Craft.Net.Server.Test
                         break;
                     case "ping":
                         e.Origin.SendChat("Pong");
+                        break;
+                    case "lightning":
+                        minecraftServer.SpawnLightning(minecraftServer.GetClientWorld(e.Origin), e.Origin.Entity.Position);
+                        break;
+                    case "velocity":
+                        e.Origin.SendChat(e.Origin.Entity.Velocity.ToString());
+                        break;
+                    case "save":
+                        minecraftServer.DefaultWorld.Regions[Vector3.Zero].Save();
+                        break;
+                    case "time":
+                        var clients = minecraftServer.GetClientsInWorld(minecraftServer.GetClientWorld(e.Origin));
+                        minecraftServer.GetLevel(minecraftServer.GetClientWorld(e.Origin)).Time = 18000;
+                        foreach (var minecraftClient in clients)
+                            minecraftClient.SendPacket(new TimeUpdatePacket(18000));
+                        break;
+                    case "kill":
+                        e.Origin.Entity.Health = 0;
+                        break;
+                    case "survival":
+                        e.Origin.Entity.GameMode = GameMode.Survival;
+                        break;
+                    case "creative":
+                        e.Origin.Entity.GameMode = GameMode.Creative;
                         break;
                 }
             }

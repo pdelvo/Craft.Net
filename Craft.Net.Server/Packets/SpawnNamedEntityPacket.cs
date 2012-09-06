@@ -1,58 +1,60 @@
 using System;
-using Craft.Net.Server.Worlds;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class SpawnNamedEntityPacket : Packet
     {
+        public short CurrentItem;
         public int EntityId;
+        public float Pitch;
         public string PlayerName;
         public Vector3 Position;
-        public float Yaw, Pitch;
-        public short CurrentItem;
+        public float Yaw;
 
-        public SpawnNamedEntityPacket(MinecraftClient Client)
+        public SpawnNamedEntityPacket()
         {
-            this.EntityId = Client.Entity.Id;
-            this.PlayerName = Client.Username;
-            this.Position = Client.Entity.Position;
-            this.Yaw = Client.Entity.Yaw;
-            this.Pitch = Client.Entity.Pitch;
-            this.CurrentItem = 0; // TODO
         }
 
-        public override byte PacketID
+        public SpawnNamedEntityPacket(MinecraftClient client)
         {
-            get
-            {
-                return 0x14;
-            }
+            EntityId = client.Entity.Id;
+            PlayerName = client.Username;
+            Position = client.Entity.Position;
+            Yaw = client.Entity.Yaw;
+            Pitch = client.Entity.Pitch;
+            CurrentItem = 0; // TODO
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override byte PacketId
+        {
+            get { return 0x14; }
+        }
+
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             throw new InvalidOperationException();
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateInt(EntityId))
-                .Concat(CreateString(PlayerName))
-                .Concat(CreateInt((int)Position.X))
-                .Concat(CreateInt((int)Position.Y))
-                .Concat(CreateInt((int)Position.Z))
-                .Concat(CreatePackedByte(Yaw))
-                .Concat(CreatePackedByte(Pitch))
-                .Concat(CreateShort(CurrentItem)).ToArray();
-            Client.SendData(buffer);
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateInt32(EntityId))
+                .Concat(DataUtility.CreateString(PlayerName))
+                .Concat(DataUtility.CreateAbsoluteInteger((int)Position.X))
+                .Concat(DataUtility.CreateAbsoluteInteger((int)Position.Y))
+                .Concat(DataUtility.CreateAbsoluteInteger((int)Position.Z))
+                .Concat(DataUtility.CreatePackedByte(Yaw))
+                .Concat(DataUtility.CreatePackedByte(Pitch))
+                .Concat(DataUtility.CreateInt16(CurrentItem))
+                .Concat(new byte[] { 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x7F }).ToArray(); // TODO: Metadata
+            client.SendData(buffer);
         }
     }
 }
-

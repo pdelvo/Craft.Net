@@ -1,51 +1,47 @@
-using System;
-
+using Craft.Net.Data;
 namespace Craft.Net.Server.Packets
 {
     public class PlayerAbilitiesPacket : Packet
     {
-        public byte WalkingSpeed, FlyingSpeed;
+        public byte FlyingSpeed;
+        public byte WalkingSpeed;
 
         public PlayerAbilitiesPacket()
         {
         }
 
-        public PlayerAbilitiesPacket(byte WalkingSpeed, byte FlyingSpeed)
+        public PlayerAbilitiesPacket(byte walkingSpeed, byte flyingSpeed)
         {
-            this.WalkingSpeed = WalkingSpeed;
-            this.FlyingSpeed = FlyingSpeed;
+            this.WalkingSpeed = walkingSpeed;
+            this.FlyingSpeed = flyingSpeed;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0xCA;
-            }
+            get { return 0xCA; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             byte flags = 0;
             int offset = 1;
-            if (!TryReadByte(Buffer, ref offset, out flags))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out flags))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out WalkingSpeed))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out WalkingSpeed))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out FlyingSpeed))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out FlyingSpeed))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             // TODO
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
             // TODO
         }
     }
 }
-

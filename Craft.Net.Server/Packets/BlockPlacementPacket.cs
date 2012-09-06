@@ -1,81 +1,76 @@
 using System;
-using Craft.Net.Server.Worlds;
-using Craft.Net.Server.Blocks;
+using Craft.Net.Data;
+using Craft.Net.Data.Blocks;
 
 namespace Craft.Net.Server.Packets
 {
     public class BlockPlacementPacket : Packet
     {
-        public Vector3 Position;
+        public Vector3 CursorPosition;
         public byte Direction;
         public Slot HeldItem;
-        public Vector3 CursorPosition;
+        public Vector3 Position;
 
-        public BlockPlacementPacket()
+        public override byte PacketId
         {
+            get { return 0xF; }
         }
 
-        public override byte PacketID
-        {
-            get
-            {
-                return 0xF;
-            }
-        }
-
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
             int x = 0, z = 0;
             byte y = 0;
             byte curX, curY, curZ;
-            if (!TryReadInt(Buffer, ref offset, out x))
+            if (!DataUtility.TryReadInt32(buffer, ref offset, out x))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out y))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out y))
                 return -1;
-            if (!TryReadInt(Buffer, ref offset, out z))
+            if (!DataUtility.TryReadInt32(buffer, ref offset, out z))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out Direction))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out Direction))
                 return -1;
-            if (!Slot.TryReadSlot(Buffer, ref offset, out HeldItem))
+            if (!Slot.TryReadSlot(buffer, ref offset, out HeldItem))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out curX))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out curX))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out curY))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out curY))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out curZ))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out curZ))
                 return -1;
             Position = new Vector3(x, y, z);
             CursorPosition = new Vector3(curX, curY, curZ);
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            if (Client.Entity.Position.DistanceTo(Position) > 6)
+            if (client.Entity.Position.DistanceTo(Position) > 6) // TODO: Use client.Reach
                 return;
-            if (HeldItem.Id < 0x80)
+            var item = client.Entity.Inventory[client.Entity.SelectedSlot];
+            if (item != null && item.Id == 0xFFFF)
+                item.Id = 0;
+            if (item != null)
             {
-                Block block = (Block)HeldItem.Id;
-                Vector3 clickedBlock = Position;
-                Vector3 placedBlock = Position;
-                placedBlock += AdjustByDirection(Direction);
-                if (block != null)
-                {
-                    // TODO: More stuff here
-                    Server.GetClientWorld(Client).SetBlock(placedBlock, block);
-                }
+                item.Item.OnItemUsed(server.GetClientWorld(client), Position, AdjustByDirection(Direction), CursorPosition, client.Entity);
+                if (client.Entity.GameMode != GameMode.Creative)
+                    client.Entity.Inventory[client.Entity.SelectedSlot].Count--;
+            }
+            else
+            {
+                client.SendPacket(new DisconnectPacket("Unrecognized item!"));
+                server.ProcessSendQueue();
             }
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            throw new System.NotImplementedException();
+            throw new NotImplementedException();
         }
 
-        private static Vector3 AdjustByDirection(byte Direction)
+        private static Vector3 AdjustByDirection(byte direction)
         {
-            switch (Direction)
+            switch (direction)
             {
                 case 0:
                     return Vector3.Down;
@@ -93,4 +88,3 @@ namespace Craft.Net.Server.Packets
         }
     }
 }
-

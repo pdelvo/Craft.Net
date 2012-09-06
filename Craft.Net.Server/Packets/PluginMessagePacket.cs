@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -14,43 +12,43 @@ namespace Craft.Net.Server.Packets
         {
         }
 
-        public PluginMessagePacket(string Channel, byte[] Message)
+        public PluginMessagePacket(string channel, byte[] message)
         {
-            this.Channel = Channel;
-            this.Message = Message;
+            this.Channel = channel;
+            this.Message = message;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
             get { return 0xFA; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 0;
-            short length = 0;
-            if (!TryReadString(Buffer, ref offset, out Channel))
+            short messageLength = 0;
+            if (!DataUtility.TryReadString(buffer, ref offset, out Channel))
                 return -1;
-            if (!TryReadShort(Buffer, ref offset, out length))
+            if (!DataUtility.TryReadInt16(buffer, ref offset, out messageLength))
                 return -1;
-            if (!TryReadArray(Buffer, length, ref offset, out Message))
+            if (!DataUtility.TryReadArray(buffer, messageLength, ref offset, out Message))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            if (Server.PluginChannels.ContainsKey(Channel))
-                Server.PluginChannels[Channel].MessageRecieved(Message);
+            if (server.PluginChannels.ContainsKey(Channel))
+                server.PluginChannels[Channel].MessageRecieved(client, Message);
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] data = new byte[] { PacketID }
-                .Concat(CreateString(Channel))
-                .Concat(CreateShort((short)Message.Length))
+            byte[] data = new[] {PacketId}
+                .Concat(DataUtility.CreateString(Channel))
+                .Concat(DataUtility.CreateInt16((short)Message.Length))
                 .Concat(Message).ToArray();
-            Client.SendData(data);
+            client.SendData(data);
         }
     }
 }

@@ -1,6 +1,9 @@
-using System;
 using System.Linq;
-using System.Security.Cryptography;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Engines;
+using Org.BouncyCastle.Crypto.Modes;
+using Org.BouncyCastle.Crypto.Parameters;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -14,51 +17,52 @@ namespace Craft.Net.Server.Packets
             VerifyToken = new byte[0];
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0xFC;
-            }
+            get { return 0xFC; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             short secretLength = 0, verifyLength = 0;
             int offset = 1;
-            if (!TryReadShort(Buffer, ref offset, out secretLength))
+            if (!DataUtility.TryReadInt16(buffer, ref offset, out secretLength))
                 return -1;
-            if (!TryReadArray(Buffer, secretLength, ref offset, out this.SharedSecret))
+            if (!DataUtility.TryReadArray(buffer, secretLength, ref offset, out SharedSecret))
                 return -1;
-            if (!TryReadShort(Buffer, ref offset, out verifyLength))
+            if (!DataUtility.TryReadInt16(buffer, ref offset, out verifyLength))
                 return -1;
-            if (!TryReadArray(Buffer, verifyLength, ref offset, out this.VerifyToken))
+            if (!DataUtility.TryReadArray(buffer, verifyLength, ref offset, out VerifyToken))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            Client.SharedKey = Server.CryptoServiceProvider.Decrypt(SharedSecret, false);
+            client.SharedKey = server.CryptoServiceProvider.Decrypt(SharedSecret, false);
 
-            Client.Encrypter = Cryptography.GenerateAES(Client.SharedKey).CreateEncryptor();
+            client.Encrypter = new BufferedBlockCipher(new CfbBlockCipher(new AesFastEngine(), 8));
+            client.Encrypter.Init(true,
+                                  new ParametersWithIV(new KeyParameter(client.SharedKey), client.SharedKey, 0, 16));
 
-            Client.Decrypter = Cryptography.GenerateAES(Client.SharedKey).CreateDecryptor();
+            client.Decrypter = new BufferedBlockCipher(new CfbBlockCipher(new AesFastEngine(), 8));
+            client.Decrypter.Init(false,
+                                  new ParametersWithIV(new KeyParameter(client.SharedKey), client.SharedKey, 0, 16));
 
-            Client.SendPacket(new EncryptionKeyResponsePacket());
-            Server.ProcessSendQueue();
+            client.SendPacket(new EncryptionKeyResponsePacket());
+            server.ProcessSendQueue();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
             // Send packet and enable encryption
-            byte[] buffer = new byte[] { PacketID }.Concat(
-                CreateShort((short)SharedSecret.Length)).Concat(
+            byte[] buffer = new[] {PacketId}.Concat(
+                DataUtility.CreateInt16((short)SharedSecret.Length)).Concat(
                 SharedSecret).Concat(
-                CreateShort((short)VerifyToken.Length)).Concat(
+                DataUtility.CreateInt16((short)VerifyToken.Length)).Concat(
                 VerifyToken).ToArray();
-            Client.SendData(buffer);
-            Client.EncryptionEnabled = true;
+            client.SendData(buffer);
+            client.EncryptionEnabled = true;
         }
     }
 }

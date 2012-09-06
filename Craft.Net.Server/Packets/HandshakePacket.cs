@@ -1,78 +1,78 @@
 using System;
-using System.Security.Cryptography;
 using System.Net;
-using System.Threading;
+using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class HandshakePacket : Packet
     {
-        public byte ProtocolVersion;
-        public string Username, Hostname;
+        public string Hostname;
         public int Port;
+        public byte ProtocolVersion;
+        public string Username;
 
-        public HandshakePacket()
+        public override byte PacketId
         {
+            get { return 0x02; }
         }
 
-        public override byte PacketID
-        {
-            get
-            {
-                return 0x02;
-            }
-        }
-
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
-            if (!TryReadByte(Buffer, ref offset, out this.ProtocolVersion))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out ProtocolVersion))
                 return -1;
-            if (!TryReadString(Buffer, ref offset, out this.Username))
+            if (!DataUtility.TryReadString(buffer, ref offset, out Username))
                 return -1;
-            if (!TryReadString(Buffer, ref offset, out this.Hostname))
+            if (!DataUtility.TryReadString(buffer, ref offset, out Hostname))
                 return -1;
-            if (!TryReadInt(Buffer, ref offset, out this.Port))
+            if (!DataUtility.TryReadInt32(buffer, ref offset, out Port))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             if (ProtocolVersion < MinecraftServer.ProtocolVersion)
             {
-                Client.SendPacket(new DisconnectPacket("Outdated client!"));
-                Server.ProcessSendQueue();
+                client.SendPacket(new DisconnectPacket("Outdated client!"));
+                server.ProcessSendQueue();
                 return;
             }
             if (ProtocolVersion > MinecraftServer.ProtocolVersion)
             {
-                Client.SendPacket(new DisconnectPacket("Outdated server!"));
-                Server.ProcessSendQueue();
+                client.SendPacket(new DisconnectPacket("Outdated server!"));
+                server.ProcessSendQueue();
                 return;
             }
-            Client.Username = Username;
-            Client.Hostname = Hostname + ":" + Port.ToString();
-            // Respond with encryption request
-            if (Server.OnlineMode)
-                Client.AuthenticationHash = CreateHash();
-            else
-                Client.AuthenticationHash = "-";
-            if (Server.EncryptionEnabled)
+            if (server.Clients.Count(c => c.Username == Username) != 0)
             {
-                EncryptionKeyRequestPacket keyRequest =
-                    new EncryptionKeyRequestPacket(Client.AuthenticationHash,
-                                                   Server.ServerKey);
-                Client.SendPacket(keyRequest);
-                Server.ProcessSendQueue();
+                client.SendPacket(new DisconnectPacket("You are already logged in!"));
+                server.ProcessSendQueue();
+                return;
+            }
+            client.Username = Username;
+            client.Hostname = Hostname + ":" + Port.ToString();
+            // Respond with encryption request
+            if (server.OnlineMode)
+                client.AuthenticationHash = CreateHash();
+            else
+                client.AuthenticationHash = "-";
+            if (server.EncryptionEnabled)
+            {
+                var keyRequest =
+                    new EncryptionKeyRequestPacket(client.AuthenticationHash,
+                                                   server.ServerKey);
+                client.SendPacket(keyRequest);
+                server.ProcessSendQueue();
             }
             else
-                Server.LogInPlayer(Client);
+                server.LogInPlayer(client);
 
-            Client.StartKeepAliveTimer();
+            client.StartWorkers();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
@@ -91,4 +91,3 @@ namespace Craft.Net.Server.Packets
         }
     }
 }
-

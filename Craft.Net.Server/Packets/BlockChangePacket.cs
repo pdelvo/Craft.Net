@@ -1,7 +1,6 @@
 using System;
-using Craft.Net.Server.Worlds;
-using Craft.Net.Server.Blocks;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -10,40 +9,40 @@ namespace Craft.Net.Server.Packets
         public Vector3 Position;
         public Block Value;
 
-        public BlockChangePacket(Vector3 Position, Block Value)
+        public BlockChangePacket()
         {
-            this.Position = Position;
-            this.Value = Value;
         }
 
-        public override byte PacketID
+        public BlockChangePacket(Vector3 position, Block value)
         {
-            get
-            {
-                return 0x35;
-            }
+            this.Position = position;
+            this.Value = value;
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override byte PacketId
+        {
+            get { return 0x35; }
+        }
+
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             throw new InvalidOperationException();
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateInt((int)Position.X))
-                .Concat(new byte[] { (byte)Position.Y })
-                .Concat(CreateInt((int)Position.Z))
-                .Concat(CreateShort((short)Value.BlockID))
-                .Concat(new byte[] { Value.Metadata }).ToArray();
-            Client.SendData(buffer);
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateInt32((int)Position.X))
+                .Concat(new[] {(byte)Position.Y})
+                .Concat(DataUtility.CreateInt32((int)Position.Z))
+                .Concat(DataUtility.CreateUInt16(Value.Id))
+                .Concat(new[] { Value.Metadata }).ToArray();
+            client.SendData(buffer);
         }
     }
 }
-

@@ -1,6 +1,6 @@
-using System;
 using System.Linq;
 using Craft.Net.Server.Events;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -12,42 +12,38 @@ namespace Craft.Net.Server.Packets
         {
         }
 
-        public ChatMessagePacket(string Message)
+        public ChatMessagePacket(string message)
         {
-            this.Message = Message;
+            this.Message = message;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0x3;
-            }
+            get { return 0x3; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
-            if (!TryReadString(Buffer, ref offset, out Message))
+            if (!DataUtility.TryReadString(buffer, ref offset, out Message))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            Server.Log("<" + Client.Username + "> " + Message);
-            ChatMessageEventArgs args = new ChatMessageEventArgs(Client, Message);
-            Server.FireOnChatMessage(args);
+            server.Log("<" + client.Username + "> " + Message);
+            var args = new ChatMessageEventArgs(client, Message);
+            server.FireOnChatMessage(args);
             if (!args.Handled)
-                Server.SendChat("<" + Client.Username + "> " + Message);
+                server.SendChat("<" + client.Username + "> " + Message);
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateString(Message)).ToArray();
-            Client.SendData(buffer);
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateString(Message)).ToArray();
+            client.SendData(buffer);
         }
     }
 }
-

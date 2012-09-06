@@ -1,28 +1,43 @@
-using System;
 using System.IO;
 
 namespace Craft.Net.Server
 {
+    /// <summary>
+    /// Logs server messages to a file.
+    /// </summary>
     public class FileLogWriter : ILogProvider
     {
+        private readonly StreamWriter logWriter;
+        /// <summary>
+        /// The minimum message importance level required to log a message.
+        /// </summary>
         public LogImportance MinimumImportance;
-        private StreamWriter LogWriter;
 
-        public FileLogWriter(string File, LogImportance MinimumImportance)
+        /// <summary>
+        /// Creates a new logger to output messages at or above the specified
+        /// importance to the given file.
+        /// </summary>
+        public FileLogWriter(string file, LogImportance minimumImportance)
         {
-            this.MinimumImportance = MinimumImportance;
-            LogWriter = new StreamWriter(File, true);
+            this.MinimumImportance = minimumImportance;
+            logWriter = new StreamWriter(file, true);
         }
 
-        public void Log(string text, LogImportance Level)
+        #region ILogProvider Members
+
+        /// <summary>
+        /// Logs the given text at the given importance.
+        /// </summary>
+        public void Log(string text, LogImportance level)
         {
-            lock (LogWriter)
+            lock (logWriter)
             {
-                if (Level >= MinimumImportance)
-                    LogWriter.WriteLine(text);
-                LogWriter.Flush();
+                if (level >= MinimumImportance)
+                    logWriter.WriteLine(text);
+                logWriter.Flush();
             }
         }
+
+        #endregion
     }
 }
-

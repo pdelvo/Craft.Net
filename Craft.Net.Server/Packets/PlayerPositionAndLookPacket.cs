@@ -1,89 +1,88 @@
-using System;
-using Craft.Net.Server.Worlds;
 using System.Linq;
+using Craft.Net.Data;
+using Craft.Net.Data.Entities;
 
 namespace Craft.Net.Server.Packets
 {
     public class PlayerPositionAndLookPacket : Packet
     {
-        public double X, Y, Z, Stance;
-        public float Yaw, Pitch;
         public bool OnGround;
+        public float Pitch;
+        public double Stance;
+        public double X, Y;
+        public float Yaw;
+        public double Z;
 
         public PlayerPositionAndLookPacket()
         {
         }
 
-        public PlayerPositionAndLookPacket(Vector3 Position, float Yaw, float Pitch, bool OnGround)
+        public PlayerPositionAndLookPacket(Vector3 position, float yaw, float pitch, bool onGround)
         {
-            this.X = Position.X;
-            this.Y = Position.Y;
-            this.Z = Position.Z;
-            this.Stance = this.Y + 1.5;
-            this.Yaw = Yaw;
-            this.Pitch = Pitch;
-            this.OnGround = OnGround;
+            X = position.X;
+            Y = position.Y;
+            Z = position.Z;
+            Stance = Y + PlayerEntity.Height;
+            this.Yaw = yaw;
+            this.Pitch = pitch;
+            this.OnGround = onGround;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0xD;
-            }
+            get { return 0xD; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
-            if (!TryReadDouble(Buffer, ref offset, out X))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out X))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Y))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Y))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Stance))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Stance))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Z))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Z))
                 return -1;
-            if (!TryReadFloat(Buffer, ref offset, out Yaw))
+            if (!DataUtility.TryReadFloat(buffer, ref offset, out Yaw))
                 return -1;
-            if (!TryReadFloat(Buffer, ref offset, out Pitch))
+            if (!DataUtility.TryReadFloat(buffer, ref offset, out Pitch))
                 return -1;
-            if (!TryReadBoolean(Buffer, ref offset, out OnGround))
+            if (!DataUtility.TryReadBoolean(buffer, ref offset, out OnGround))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            if (!Client.ReadyToSpawn)
+            if (!client.ReadyToSpawn)
                 return;
-            Client.Entity.Position = new Vector3(X, Y, Z);
-            Client.Entity.Pitch = Pitch;
-            Client.Entity.Yaw = Yaw;
-            if (Client.Entity.Position.DistanceTo(Client.Entity.OldPosition) > 
-                Client.MaxMoveDistance)
+            client.Entity.Position = new Vector3(X, Y, Z);
+            client.Entity.Pitch = Pitch;
+            client.Entity.Yaw = Yaw;
+            if (client.Entity.Position.DistanceTo(client.Entity.OldPosition) >
+                client.MaxMoveDistance)
             {
-                Client.SendPacket(new DisconnectPacket("Hacking: You moved too fast!"));
-                Server.ProcessSendQueue();
+                client.SendPacket(new DisconnectPacket("Hacking: You moved too fast!"));
+                server.ProcessSendQueue();
                 return;
             }
-            Client.UpdateChunksAsync();
-            Server.GetClientWorld(Client).EntityManager.UpdateEntity(Client.Entity);
-            Server.ProcessSendQueue();
+            client.UpdateChunksAsync();
+            server.ProcessSendQueue();
+            server.EntityManager.UpdateEntity(client.Entity);
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateDouble(X))
-                .Concat(CreateDouble(Stance))
-                .Concat(CreateDouble(Y))
-                .Concat(CreateDouble(Z))
-                .Concat(CreateFloat(Yaw))
-                .Concat(CreateFloat(Pitch))
-                .Concat(CreateBoolean(OnGround)).ToArray();
-            Client.SendData(buffer);
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateDouble(X))
+                .Concat(DataUtility.CreateDouble(Stance))
+                .Concat(DataUtility.CreateDouble(Y))
+                .Concat(DataUtility.CreateDouble(Z))
+                .Concat(DataUtility.CreateFloat(Yaw))
+                .Concat(DataUtility.CreateFloat(Pitch))
+                .Concat(DataUtility.CreateBoolean(OnGround)).ToArray();
+            client.SendData(buffer);
         }
     }
 }
-

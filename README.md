@@ -1,14 +1,14 @@
-Craft.Net
-========
+# Craft.Net
 
-Craft.Net is a library for .Net that implements the Minecraft 1.3.1 server protocol.
-It also contains functionality for manipulating Anvil worlds, simulating block interactions,
-and simulating entity interactions.
+Craft.Net is consists of several libraries for .NET that that accomplish various
+Minecraft-related tasks. Included in Craft.Net are:
+
+* Craft.Net.Data: A library to work with various kinds of Minecraft-related data.
+* Craft.Net.Server: An implementation of the 12w34b Minecraft server protocol.
 
 Craft.Net runs well on Microsoft.Net or [Mono](https://github.com/mono/mono).
 
-Features
--------
+## Features
 
 Craft.Net is incomplete. However, it aims to eventually reproduce the functionality of the
 vanilla Minecraft server. In addition, Craft.Net should use significantly less CPU and
@@ -23,25 +23,26 @@ Some cool technical things about Craft.Net that are already implemented:
 
 * **Asynchronous I/O:** *Minimizes CPU load and increases speed*
 * **Threaded Chunk Management:** *Offloads chunk compression and sending to short-lived threads*
+* **Anvil Support:** *Includes support for loading, saving, creating, and manipulating Anvil worlds*
 
-Usage
-----
+## Usage
 
 Craft.Net is a library, and will not work as a standalone server. However, the basic usage
-is simple. To get started, the following code will create a Minecraft 1.3.1 server:
+is simple. To get started, the following code will create a Minecraft 12w34b server:
 
     MinecraftServer server = new MinecraftServer(new IPEndPoint(IPAddress.Any, 25565));
-    server.AddWorld(new World(new FlatlandGenerator()));
+    server.AddLevel(new Level("world"));
     server.Start();
     // ...
     server.Stop();
 
+This server will create a "world" directory and place an Anvil world in there. The default world
+generator is flatland. If a world already exists in that directory, it will use it instead of
+creating a new one.
+
 The MinecraftServer class is the core server class, and runs networking, chunk management,
 block updates, and more. Each server must have at least one world to start, and an
 InvalidOperationException will be thrown if an attempt is made to start the server without.
-
-Additionally, each world must have a terrain generator, which implements IWorldGenerator.
-FlatlandGenerator is a clone of the vanilla Minecraft flatland generator.
 
 You should also consider adding an ILogProvider to the server with
 MinecraftServer.AddLogProvider. Included in Craft.Net is ConsoleLogWriter, and FileLogWriter,
@@ -51,31 +52,28 @@ logging in. Medium importance is for things like chat and player deaths. Low imp
 log of all communication on the server, and all packets are logged with a low importance.
 Packet logging is only enabled in DEBUG builds.
 
-Contributing
-----------
+## Contributing
 
 If you wish to contribute your own code to Craft.Net, please create a fork. You are
 encouraged to follow the code standards currently in use, and pull requests that do not will
 be rejected. You are also encouraged to make small, focused pull requests, rather than large,
 sweeping changes. For such changes, it would be better to create an issue instead.
 
-Getting Help
-------------
+## Getting Help
 
 You can get help by making an [issue on GitHub](https://github.com/SirCmpwn/Craft.Net/issues),
 or joining #craft.net on irc.freenode.net.  If you are already knowledgable about using
 Craft.Net, consider contributing to the [wiki](https://github.com/SirCmpwn/Craft.Net/wiki) for
 the sake of others.
 
-Dependencies
------------
+## Dependencies
 
 Craft.Net depends on the following tools and assemblies, which are included in the repository:
 
-* [SharpZipLib](http://www.icsharpcode.net/opensource/sharpziplib/) is used for data compression.
+* [DotNetZip](http://dotnetzip.codeplex.com/) is used for data compression.
+* [BouncyCastle](http://www.bouncycastle.org/) is used for encryption.
 
-Licensing
----------
+## Licensing
 
 Craft.Net uses the permissive [MIT license](http://www.opensource.org/licenses/mit-license.php/).
 

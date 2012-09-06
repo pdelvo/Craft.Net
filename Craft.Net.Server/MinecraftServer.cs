@@ -1,90 +1,162 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Collections.Generic;
-using System.Threading;
-using Craft.Net.Server.Worlds;
-using Craft.Net.Server.Worlds.Entities;
-using Craft.Net.Server.Packets;
-using Craft.Net.Server.Events;
 using System.Security.Cryptography;
+using System.Threading;
+using Craft.Net.Server.Events;
+using Craft.Net.Server.Packets;
+using Craft.Net.Data;
+using Craft.Net.Data.Entities;
+using Craft.Net.Data.Blocks;
 
 namespace Craft.Net.Server
 {
-	/// <summary>
-	/// A Minecraft server.
-	/// </summary>
-	public class MinecraftServer
-	{
+    /// <summary>
+    /// A Minecraft 12w34b server.
+    /// </summary>
+    public class MinecraftServer
+    {
         #region Public Fields
 
-        public const int ProtocolVersion = 39;
+        /// <summary>
+        /// The protocol version supported by this server.
+        /// </summary>
+        public const int ProtocolVersion = 42;
 
+        /// <summary>
+        /// A list of all connected clients. Not all connected
+        /// clients will be logged in.
+        /// </summary>
         public List<MinecraftClient> Clients;
-        public List<World> Worlds;
+        /// <summary>
+        /// The default world to spawn clients in.
+        /// </summary>
         public int DefaultWorldIndex;
-        public string MotD;
-        public byte MaxPlayers;
-        public bool OnlineMode, EncryptionEnabled;
+        /// <summary>
+        /// Set to true if this server is to use encrypted
+        /// connections.
+        /// </summary>
+        public bool EncryptionEnabled;
+        /// <summary>
+        /// A list of <see cref="ILogProvider"/> objects to log
+        /// data to.
+        /// </summary>
         public List<ILogProvider> LogProviders;
+        /// <summary>
+        /// The maximum number of players that may log in.
+        /// </summary>
+        public byte MaxPlayers;
+        /// <summary>
+        /// The message of the day.
+        /// </summary>
+        public string MotD;
+        /// <summary>
+        /// Set to true to authenticate connecting users with Minecraft.net
+        /// </summary>
+        public bool OnlineMode;
+        /// <summary>
+        /// A list of Worlds this server will use.
+        /// </summary>
+        public List<Level> Levels;
+        /// <summary>
+        /// This server's entity manager.
+        /// </summary>
+        public EntityManager EntityManager;
+        /// <summary>
+        /// This server's difficulty.
+        /// </summary>
+        public Difficulty Difficulty;
 
-        public event EventHandler<ChatMessageEventArgs> OnChatMessage;
-        
         #endregion
-        
+
         #region Private Fields
 
-		private Socket socket;
-        private Thread SendQueueThread;
-        private Timer UpdatePlayerListTimer;
-        private AutoResetEvent SendQueueReset;
-
-	    internal Dictionary<string, PluginChannel> PluginChannels;
         internal static Random Random;
-	    internal RSAParameters ServerKey;
-	    internal RSACryptoServiceProvider CryptoServiceProvider;
+        internal RSACryptoServiceProvider CryptoServiceProvider;
+        internal Dictionary<string, PluginChannel> PluginChannels;
+        internal RSAParameters ServerKey;
+
+        private AutoResetEvent sendQueueReset;
+        private Thread sendQueueThread;
+        private Timer updatePlayerListTimer;
+        private Socket socket;
 
         #endregion
 
         #region Public Properties
 
+        /// <summary>
+        /// Gets the default world for new clients.
+        /// </summary>
         public World DefaultWorld
         {
-            get
-            {
-                return Worlds[DefaultWorldIndex];
-            }
+            get { return Levels[DefaultWorldIndex].World; }
+        }
+
+        /// <summary>
+        /// Gets the default level for new clients.
+        /// </summary>
+        public Level DefaultLevel
+        {
+            get { return Levels[DefaultWorldIndex]; }
         }
 
         #endregion
-        
+
+        #region Events
+
+        /// <summary>
+        /// Fired when a player logs in.
+        /// </summary>
+        public event EventHandler<PlayerLogInEventArgs> PlayerLoggedIn;
+        /// <summary>
+        /// Fired when a player logs out.
+        /// </summary>
+        public event EventHandler<PlayerLogInEventArgs> PlayerLoggedOut;
+        /// <summary>
+        /// Fired when the server recieves a <see cref="ChatMessagePacket"/>.
+        /// </summary>
+        public event EventHandler<ChatMessageEventArgs> ChatMessage;
+
+        #endregion
+
         #region Constructor
-		
-		public MinecraftServer(IPEndPoint EndPoint)
-		{
+
+        /// <summary>
+        /// Creates a new Minecraft server to listen on the requested
+        /// endpoint.
+        /// </summary>
+        public MinecraftServer(IPEndPoint endPoint)
+        {
             Clients = new List<MinecraftClient>();
             MaxPlayers = 25;
             MotD = "Craft.Net Server";
-		    OnlineMode = EncryptionEnabled = true;
+            OnlineMode = EncryptionEnabled = true;
             Random = new Random();
             DefaultWorldIndex = 0;
-            Worlds = new List<World>();
+            Levels = new List<Level>();
             LogProviders = new List<ILogProvider>();
             PluginChannels = new Dictionary<string, PluginChannel>();
- 
-			socket = new Socket(AddressFamily.InterNetwork,
+            EntityManager = new EntityManager(this);
+            Difficulty = Difficulty.Peaceful;
+
+            socket = new Socket(AddressFamily.InterNetwork,
                                 SocketType.Stream, ProtocolType.Tcp);
-            socket.Bind(EndPoint);
-		}
-        
+            socket.Bind(endPoint);
+        }
+
         #endregion
 
         #region Public Methods
 
+        /// <summary>
+        /// Starts the server.
+        /// </summary>
         public void Start()
         {
-            if (Worlds.Count == 0)
+            if (Levels.Count == 0)
             {
                 Log("Unable to start server with no worlds loaded.");
                 throw new InvalidOperationException("Unable to start server with no worlds loaded.");
@@ -96,23 +168,26 @@ namespace Craft.Net.Server
             ServerKey = CryptoServiceProvider.ExportParameters(true);
 
             socket.Listen(10);
-            SendQueueReset = new AutoResetEvent(false);
-            SendQueueThread = new Thread(SendQueueWorker);
-            SendQueueThread.Start();
+            sendQueueReset = new AutoResetEvent(false);
+            sendQueueThread = new Thread(SendQueueWorker);
+            sendQueueThread.Start();
             socket.BeginAccept(AcceptConnectionAsync, null);
 
-            UpdatePlayerListTimer = new Timer(UpdatePlayerList, null, 60000, 60000);
+            updatePlayerListTimer = new Timer(UpdatePlayerList, null, 60000, 60000);
 
             Log("Server started.");
-		}
+        }
 
+        /// <summary>
+        /// Stops the server.
+        /// </summary>
         public void Stop()
         {
             Log("Stopping server...");
-            if (SendQueueThread != null)
+            if (sendQueueThread != null)
             {
-                SendQueueThread.Abort();
-                SendQueueThread = null;
+                sendQueueThread.Abort();
+                sendQueueThread = null;
             }
             if (socket != null)
             {
@@ -120,111 +195,178 @@ namespace Craft.Net.Server
                     socket.Shutdown(SocketShutdown.Both);
                 socket = null;
             }
-            UpdatePlayerListTimer.Dispose();
+            updatePlayerListTimer.Dispose();
             Log("Server stopped.");
         }
 
+        /// <summary>
+        /// After queueing several packets to send, this will
+        /// process the queue.
+        /// </summary>
         public void ProcessSendQueue()
         {
-            if (SendQueueReset != null)
-                SendQueueReset.Set();
+            if (sendQueueReset != null)
+                sendQueueReset.Set();
         }
 
-        public void AddLogProvider(ILogProvider LogProvider)
+        /// <summary>
+        /// Adds the requested <see cref="ILogProvider"/> to the
+        /// list of log providers.
+        /// </summary>
+        public void AddLogProvider(ILogProvider logProvider)
         {
-            LogProviders.Add(LogProvider);
+            LogProviders.Add(logProvider);
         }
 
-        public void Log(string Text)
+        /// <summary>
+        /// Logs the given text with high importance.
+        /// </summary>
+        public void Log(string text)
         {
-            Log(Text, LogImportance.High);
+            Log(text, LogImportance.High);
         }
 
-        public void Log(string Text, LogImportance LogLevel)
+        /// <summary>
+        /// Logs the given text.
+        /// </summary>
+        public void Log(string text, LogImportance logLevel)
         {
-            foreach (var provider in LogProviders)
-                provider.Log(Text, LogLevel);
+            foreach (ILogProvider provider in LogProviders)
+                provider.Log(text, logLevel);
         }
 
-        public void AddWorld(World World)
+        /// <summary>
+        /// Adds a world to this server's list of worlds.
+        /// </summary>
+        public void AddLevel(Level level)
         {
-            World.EntityManager.Server = this;
-            World.OnBlockChanged += HandleOnBlockChanged;
-            Worlds.Add(World);
+            level.World.OnBlockChanged += HandleOnBlockChanged;
+            Levels.Add(level);
         }
 
-        private void HandleOnBlockChanged(object sender, BlockChangedEventArgs e)
+        /// <summary>
+        /// Gets the World that the given client is present in.
+        /// </summary>
+        public World GetClientWorld(MinecraftClient client)
         {
-            foreach (var client in GetClientsInWorld(e.World))
-                client.SendPacket(new BlockChangePacket(e.Position, e.Value));
-            this.ProcessSendQueue();
+            return DefaultWorld; // TODO
         }
 
-        public World GetClientWorld(MinecraftClient Client)
+        /// <summary>
+        /// Gets all <see cref="MinecraftClient"/> objects in the given
+        /// world.
+        /// </summary>
+        public IEnumerable<MinecraftClient> GetClientsInWorld(World world)
         {
-            foreach (World world in this.Worlds)
-            {
-                if (world.EntityManager.Entities.Contains(Client.Entity))
-                    return world;
-            }
-            return null;
+            return EntityManager.GetClientsInWorld(world);
         }
 
-        public MinecraftClient[] GetClientsInWorld(World world)
-        {
-            List<MinecraftClient> clients = new List<MinecraftClient>();
-            foreach (var client in Clients)
-            {
-                if (world.EntityManager.Entities.Contains(client.Entity))
-                    clients.Add(client);
-            }
-            return clients.ToArray();
-        }
-
+        /// <summary>
+        /// Sends the specified chat message to all connected clients.
+        /// </summary>
         public void SendChat(string message)
         {
             for (int i = 0; i < Clients.Count; i++)
                 Clients[i].SendPacket(new ChatMessagePacket(message));
-            this.ProcessSendQueue();
+            ProcessSendQueue();
         }
 
+        /// <summary>
+        /// Registers the provided <see cref="PluginChannel"/> to listen
+        /// for and send plugin messages.
+        /// </summary>
         public void RegisterPluginChannel(PluginChannel channel)
         {
             PluginChannels.Add(channel.Channel, channel);
             channel.ChannelRegistered(this);
         }
-        
+
+        /// <summary>
+        /// Sends and updated player list to all connected clients.
+        /// </summary>
+        public void UpdatePlayerList(object unused)
+        {
+            if (Clients.Count != 0)
+            {
+                for (int i = 0; i < Clients.Count; i++)
+                {
+                    foreach (MinecraftClient client in Clients)
+                        Clients[i].SendPacket(new PlayerListItemPacket(
+                                                  client.Username, true, client.Ping));
+                }
+            }
+            ProcessSendQueue();
+        }
+
+        /// <summary>
+        /// Spawns a bolt of lightning in the given world
+        /// at the given position.
+        /// </summary>
+        public void SpawnLightning(World world, Vector3 position)
+        {
+            var chunk = world.GetChunk(World.WorldToChunkCoordinates(position));
+            var block = World.FindBlockPosition(position);
+            byte y = (byte)(chunk.GetHeight((byte)block.X, (byte)block.Z) + 1);
+
+            var strike = new Vector3(position.X, y, position.Z);
+            if (world.GetBlock(strike + Vector3.Down).Transparency == Transparency.Opaque)
+                world.SetBlock(strike, new FireBlock());
+
+            var clients = GetClientsInWorld(world);
+            foreach (var minecraftClient in clients)
+                minecraftClient.SendPacket(new SpawnLightningPacket(EntityManager.nextEntityId++, strike));
+
+            ProcessSendQueue();
+        }
+
+        public Level GetLevel(World world)
+        {
+            return Levels.First(l => l.World == world);
+        }
+
         #endregion
-        
+
         #region Private Methods
+
+        private void HandleOnBlockChanged(object sender, BlockChangedEventArgs e)
+        {
+            foreach (MinecraftClient client in GetClientsInWorld(e.World))
+                client.SendPacket(new BlockChangePacket(e.Position, e.Value));
+            ProcessSendQueue();
+        }
 
         private void SendQueueWorker()
         {
             while (true)
             {
-                SendQueueReset.Reset();
-                SendQueueReset.WaitOne();
+                sendQueueReset.Reset();
+                sendQueueReset.WaitOne();
                 if (Clients.Count != 0)
                 {
-                    for (int i = 0; i < Clients.Count; i++)
+                    lock (Clients)
                     {
-                        while (Clients[i].SendQueue.Count != 0)
+                        for (int i = 0; i < Clients.Count; i++)
                         {
-                            var packet = Clients[i].SendQueue.Dequeue();
-                            Log("[SERVER->CLIENT] " + Clients[i].Socket.RemoteEndPoint.ToString(),
-                                LogImportance.Low);
-                            Log(packet.ToString(), LogImportance.Low);
-                            try
+                            while (i < Clients.Count && Clients[i].SendQueue.Count != 0)
                             {
-                                packet.SendPacket(this, Clients[i]);
-                                packet.FirePacketSent();
-                            }
-                            catch
-                            {
-                                // Occasionally, the client will disconnect while
-                                // processing the packet to be sent, which causes
-                                // a fatal exception.
-                                lock (Clients)
+                                Packet packet = Clients[i].SendQueue.Dequeue();
+                                // I don't understand why this happens. The only place the SendQueue
+                                // is modified is through Client.SendPacket, and I watched for null packets
+                                // entering through there. There is never a null packet that is added
+                                // into the packet queue
+                                if (packet == null)
+                                    continue;
+#if DEBUG
+                                Log("[SERVER->CLIENT] " + Clients[i].Socket.RemoteEndPoint,
+                                    LogImportance.Low);
+                                Log(packet.ToString(), LogImportance.Low);
+#endif
+                                try
+                                {
+                                    packet.SendPacket(this, Clients[i]);
+                                    packet.FirePacketSent();
+                                }
+                                catch
                                 {
                                     if (i < Clients.Count)
                                     {
@@ -233,8 +375,8 @@ namespace Craft.Net.Server
                                             Clients[i].Socket.BeginDisconnect(false, null, null);
                                     }
                                     i--;
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -242,11 +384,11 @@ namespace Craft.Net.Server
                 Thread.Sleep(1);
             }
         }
-        
+
         private void AcceptConnectionAsync(IAsyncResult result)
         {
             Socket connection = socket.EndAccept(result);
-            MinecraftClient client = new MinecraftClient(connection, this);
+            var client = new MinecraftClient(connection, this);
             Clients.Add(client);
             client.Socket.SendTimeout = 5000;
             client.Socket.BeginReceive(client.RecieveBuffer, client.RecieveBufferIndex,
@@ -257,10 +399,10 @@ namespace Craft.Net.Server
 
         private void SocketRecieveAsync(IAsyncResult result)
         {
-            MinecraftClient client = (MinecraftClient)result.AsyncState;
+            var client = (MinecraftClient)result.AsyncState;
             SocketError error;
-            int length = client.Socket.EndReceive(result, out error);
-            if (error != SocketError.Success || !client.Socket.Connected || length == 0)
+            int length = client.Socket.EndReceive(result, out error) + client.RecieveBufferIndex;
+            if (error != SocketError.Success || !client.Socket.Connected || length == client.RecieveBufferIndex)
             {
                 if (error != SocketError.Success)
                     Log("Socket error: " + error);
@@ -270,13 +412,16 @@ namespace Craft.Net.Server
             {
                 try
                 {
-                    var packets = PacketReader.TryReadPackets(ref client, length);
-                    foreach (var packet in packets)
-                        packet.HandlePacket(this, ref client);
+                    IEnumerable<Packet> packets = PacketReader.TryReadPackets(ref client, length);
+                    foreach (Packet packet in packets)
+                        packet.HandlePacket(this, client);
 
-                    client.Socket.BeginReceive(client.RecieveBuffer, client.RecieveBufferIndex,
-                                               client.RecieveBuffer.Length - client.RecieveBufferIndex,
-                                               SocketFlags.None, SocketRecieveAsync, client);
+                    if (!client.IsDisconnected)
+                    {
+                        client.Socket.BeginReceive(client.RecieveBuffer, client.RecieveBufferIndex,
+                                                   client.RecieveBuffer.Length - client.RecieveBufferIndex,
+                                                   SocketFlags.None, SocketRecieveAsync, client);
+                    }
                 }
                 catch (InvalidOperationException e)
                 {
@@ -291,78 +436,104 @@ namespace Craft.Net.Server
             }
             if (client.IsDisconnected)
             {
-                if (client.Socket.Connected)
-                    client.Socket.BeginDisconnect(false, null, null);
-                if (client.KeepAliveTimer != null)
-                    client.KeepAliveTimer.Dispose();
-                if (client.IsLoggedIn)
-                {
-                    foreach (var remainingClient in Clients)
-                    {
-                        if (remainingClient.IsLoggedIn)
-                        {
-                            remainingClient.SendPacket(new PlayerListItemPacket(
-                                client.Username, false, 0));
-                        }
-                    }
-                }
                 lock (Clients)
                 {
+                    if (client.Socket.Connected)
+                        client.Socket.BeginDisconnect(false, null, null);
+                    if (client.KeepAliveTimer != null)
+                        client.KeepAliveTimer.Dispose();
+                    if (client.IsLoggedIn)
+                    {
+                        foreach (MinecraftClient remainingClient in Clients)
+                        {
+                            if (remainingClient.IsLoggedIn)
+                            {
+                                remainingClient.SendPacket(new PlayerListItemPacket(
+                                                               client.Username, false, 0));
+                            }
+                        }
+                        DefaultLevel.SavePlayer(client.Entity);
+                        var args = new PlayerLogInEventArgs(client);
+                        OnPlayerLoggedOut(args);
+                        if (!args.Handled)
+                            SendChat(client.Username + " logged out.");
+                        EntityManager.DespawnEntity(client.Entity);
+                    }
                     Clients.Remove(client);
                 }
-                this.ProcessSendQueue();
+                ProcessSendQueue();
             }
         }
 
-        public void UpdatePlayerList(object unused)
-        {
-            if (Clients.Count != 0)
-            {
-                for (int i = 0; i < Clients.Count; i++)
-                {
-                    foreach (var client in Clients)
-                        Clients[i].SendPacket(new PlayerListItemPacket(
-                            client.Username, true, client.Ping));
-                }
-            }
-            this.ProcessSendQueue();
-        }
-        
         #endregion
 
         #region Internal Methods
 
         internal void FireOnChatMessage(ChatMessageEventArgs e)
         {
-            if (OnChatMessage != null)
-                OnChatMessage(this, e);
+            if (ChatMessage != null)
+                ChatMessage(this, e);
         }
 
-        internal void LogInPlayer(MinecraftClient Client)
+        internal void LogInPlayer(MinecraftClient client)
         {
-            this.Log(Client.Username + " logged in.");
-            Client.IsLoggedIn = true;
+            client.IsLoggedIn = true;
             // Spawn player
-            Client.Entity = new PlayerEntity(Client);
-            Client.Entity.Position = this.DefaultWorld.SpawnPoint;
-            Client.Entity.Position += new Vector3(0, PlayerEntity.Height, 0);
-            this.DefaultWorld.EntityManager.SpawnEntity(Client.Entity);
-            Client.SendPacket(new LoginPacket(Client.Entity.Id,
-                   this.DefaultWorld.LevelType, this.DefaultWorld.GameMode,
-                   Client.Entity.Dimension, this.DefaultWorld.Difficulty,
-                   this.MaxPlayers));
+            client.Entity = DefaultLevel.LoadPlayer(client.Username);
+            client.Entity.Username = client.Username;
+            client.Entity.InventoryChanged += Entity_InventoryChanged;
+            EntityManager.SpawnEntity(DefaultWorld, client.Entity);
+            client.SendPacket(new LoginPacket(client.Entity.Id,
+                                              DefaultWorld.LevelType, DefaultLevel.GameMode,
+                                              client.Entity.Dimension, this.Difficulty,
+                                              MaxPlayers));
 
             // Send initial chunks
-            Client.UpdateChunks(true);
-            MinecraftClient client = Client;
-            Client.SendQueue.Last().OnPacketSent += (sender, e) => { client.ReadyToSpawn = true; };
-            Client.SendPacket(new PlayerPositionAndLookPacket(
-                Client.Entity.Position, Client.Entity.Yaw, Client.Entity.Pitch, true));
+            client.UpdateChunks(true);
+            client.SendPacket(new PlayerPositionAndLookPacket(
+                                  client.Entity.Position, client.Entity.Yaw, client.Entity.Pitch, true));
+            client.SendQueue.Last().OnPacketSent += (sender, e) => { client.ReadyToSpawn = true; };
 
-            this.UpdatePlayerList(null); // Should also process send queue
+            // Send entities
+            EntityManager.SendClientEntities(client);
+
+            client.SendPacket(new SetWindowItemsPacket(0, client.Entity.Inventory));
+            client.SendPacket(new UpdateHealthPacket(client.Entity.Health, client.Entity.Food, client.Entity.FoodSaturation));
+            client.SendPacket(new SpawnPositionPacket(client.Entity.SpawnPoint));
+            client.SendPacket(new TimeUpdatePacket(DefaultLevel.Time));
+
+            UpdatePlayerList(null); // Should also process send queue
+
+            var args = new PlayerLogInEventArgs(client);
+            OnPlayerLoggedIn(args);
+            Log(client.Username + " logged in.");
+            if (!args.Handled)
+                SendChat(client.Username + " logged in.");
+        }
+
+        void Entity_InventoryChanged(object sender, Data.Events.InventoryChangedEventArgs e)
+        {
+            var client = EntityManager.GetClient(sender as PlayerEntity);
+            client.SendPacket(new SetSlotPacket(0, e.Index, e.NewValue));
+            this.ProcessSendQueue();
+        }
+
+        #region Events
+
+        protected internal virtual void OnPlayerLoggedIn(PlayerLogInEventArgs e)
+        {
+            if (PlayerLoggedIn != null)
+                PlayerLoggedIn(this, e);
+        }
+
+        protected internal virtual void OnPlayerLoggedOut(PlayerLogInEventArgs e)
+        {
+            if (PlayerLoggedOut != null)
+                PlayerLoggedOut(this, e);
         }
 
         #endregion
-	}
-}
 
+        #endregion
+    }
+}

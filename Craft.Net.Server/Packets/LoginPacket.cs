@@ -1,66 +1,61 @@
-using System;
-using Craft.Net.Server.Worlds;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class LoginPacket : Packet
     {
-        public int EntityId;
-        public string LevelType;
-        public GameMode GameMode;
-        public Dimension Dimension;
         public Difficulty Difficulty;
+        public Dimension Dimension;
+        public int EntityId;
+        public GameMode GameMode;
+        public string LevelType;
         public byte MaxPlayers;
 
         public LoginPacket()
         {
         }
 
-        public LoginPacket(int EntityId, string LevelType,
-                           GameMode GameMode, Dimension Dimension,
-                           Difficulty Difficulty, byte MaxPlayers)
+        public LoginPacket(int entityId, string levelType,
+                           GameMode gameMode, Dimension dimension,
+                           Difficulty difficulty, byte maxPlayers)
         {
-            this.EntityId = EntityId;
-            this.LevelType = LevelType;
-            this.GameMode = GameMode;
-            this.Dimension = Dimension;
-            this.Difficulty = Difficulty;
-            this.MaxPlayers = MaxPlayers;
+            this.EntityId = entityId;
+            this.LevelType = levelType;
+            this.GameMode = gameMode;
+            this.Dimension = dimension;
+            this.Difficulty = difficulty;
+            this.MaxPlayers = maxPlayers;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0x1;
-            }
+            get { return 0x1; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             return 1;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             // TODO: Send world, etc
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateInt(EntityId))
-                .Concat(CreateString(LevelType))
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateInt32(EntityId))
+                .Concat(DataUtility.CreateString(LevelType))
                 .Concat(new byte[]
-                {
-                    (byte)GameMode,
-                    (byte)Dimension,
-                    (byte)Difficulty,
-                    0, MaxPlayers
-                }).ToArray();
-            Client.SendData(buffer);
+                            {
+                                (byte)GameMode,
+                                (byte)Dimension,
+                                (byte)Difficulty,
+                                0, MaxPlayers
+                            }).ToArray();
+            client.SendData(buffer);
         }
     }
 }
-

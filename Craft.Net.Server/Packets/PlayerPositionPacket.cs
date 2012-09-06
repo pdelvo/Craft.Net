@@ -1,62 +1,53 @@
-using System;
-using Craft.Net.Server.Worlds;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class PlayerPositionPacket : Packet
     {
-        public double X, Y, Z, Stance;
         public bool OnGround;
+        public double Stance;
+        public double X, Y, Z;
 
-        public PlayerPositionPacket()
+        public override byte PacketId
         {
+            get { return 0xB; }
         }
 
-        public override byte PacketID
-        {
-            get
-            {
-                return 0xB;
-            }
-        }
-
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
-            if (!TryReadDouble(Buffer, ref offset, out X))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out X))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Y))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Y))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Stance))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Stance))
                 return -1;
-            if (!TryReadDouble(Buffer, ref offset, out Z))
+            if (!DataUtility.TryReadDouble(buffer, ref offset, out Z))
                 return -1;
-            if (!TryReadBoolean(Buffer, ref offset, out OnGround))
+            if (!DataUtility.TryReadBoolean(buffer, ref offset, out OnGround))
                 return -1;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            if (!Client.ReadyToSpawn)
+            if (!client.ReadyToSpawn)
                 return;
-            Client.Entity.Position = new Vector3(X, Y, Z);
-            if (Client.Entity.Position.DistanceTo(Client.Entity.OldPosition) > 
-                Client.MaxMoveDistance)
+            client.Entity.Position = new Vector3(X, Y, Z);
+            if (client.Entity.Position.DistanceTo(client.Entity.OldPosition) >
+                client.MaxMoveDistance)
             {
-                Client.SendPacket(new DisconnectPacket("Hacking: You moved too fast!"));
-                Server.ProcessSendQueue();
+                client.SendPacket(new DisconnectPacket("Hacking: You moved too fast!"));
+                server.ProcessSendQueue();
                 return;
             }
-            Client.UpdateChunksAsync();
-            Server.GetClientWorld(Client).EntityManager.UpdateEntity(Client.Entity);
-            Server.ProcessSendQueue();
+            client.UpdateChunksAsync();
+            server.ProcessSendQueue();
+            server.EntityManager.UpdateEntity(client.Entity);
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-
         }
     }
 }
-

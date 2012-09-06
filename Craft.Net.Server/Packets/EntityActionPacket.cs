@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -14,67 +15,55 @@ namespace Craft.Net.Server.Packets
 
     public class EntityActionPacket : Packet
     {
-        public int EntityId;
         public EntityAction Action;
+        public int EntityId;
 
-        public EntityActionPacket()
+        public override byte PacketId
         {
+            get { return 0x13; }
         }
 
-        public override byte PacketID
-        {
-            get
-            {
-                return 0x13;
-            }
-        }
-
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
             byte action = 0;
-            if (!TryReadInt(Buffer, ref offset, out EntityId))
+            if (!DataUtility.TryReadInt32(buffer, ref offset, out EntityId))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out action))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out action))
                 return -1;
-            this.Action = (EntityAction)action;
+            Action = (EntityAction)action;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             switch (Action)
             {
                 case EntityAction.Crouch:
-                    Client.IsCrouching = true;
+                    client.IsCrouching = true;
                     break;
                 case EntityAction.Uncrouch:
-                    Client.IsCrouching = false;
+                    client.IsCrouching = false;
                     break;
                 case EntityAction.StartSprinting:
-                    Client.IsSprinting = true;
+                    client.IsSprinting = true;
                     break;
                 case EntityAction.StopSprinting:
-                    Client.IsSprinting = false;
+                    client.IsSprinting = false;
+                    break;
+                case EntityAction.LeaveBed:
+                    client.Entity.LeaveBed();
                     break;
             }
             if (Action != EntityAction.LeaveBed) // NOTE: Does this matter?
             {
-                this.EntityId = Client.Entity.Id;
-                for (int i = 0; i < 
-                     Server.GetClientsInWorld(Server.GetClientWorld(Client)).Count(); i++)
-                {
-                    if (Server.Clients [i] != Client)
-                        Server.Clients [i].SendPacket(this);
-                }
-                Server.ProcessSendQueue();
+                // TODO ?
             }
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            throw new InvalidOperationException();
+            throw new NotImplementedException();
         }
     }
 }
-

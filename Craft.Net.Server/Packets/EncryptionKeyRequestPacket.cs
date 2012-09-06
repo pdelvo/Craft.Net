@@ -2,58 +2,55 @@ using System;
 using System.Linq;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class EncryptionKeyRequestPacket : Packet
     {
-        private string AuthenticationHash;
-        private RSAParameters ServerKey;
+        private readonly string authenticationHash;
+        private readonly RSAParameters serverKey;
 
         public EncryptionKeyRequestPacket()
         {
         }
 
-        public EncryptionKeyRequestPacket(string AuthenticationHash, RSAParameters ServerKey)
+        public EncryptionKeyRequestPacket(string authenticationHash, RSAParameters serverKey)
         {
-            this.AuthenticationHash = AuthenticationHash;
-            this.ServerKey = ServerKey;
+            this.authenticationHash = authenticationHash;
+            this.serverKey = serverKey;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0xFD;
-            }
+            get { return 0xFD; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             throw new InvalidOperationException();
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] verifyToken = new byte[4];
-            RNGCryptoServiceProvider csp = new RNGCryptoServiceProvider();
+            var verifyToken = new byte[4];
+            var csp = new RNGCryptoServiceProvider();
             csp.GetBytes(verifyToken); // TODO: Encrypt this
 
-            AsnKeyBuilder.AsnMessage encodedKey = AsnKeyBuilder.PublicKeyToX509(ServerKey);
+            AsnKeyBuilder.AsnMessage encodedKey = AsnKeyBuilder.PublicKeyToX509(serverKey);
 
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateString(AuthenticationHash))
-                .Concat(CreateShort((short)encodedKey.GetBytes().Length))
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateString(authenticationHash))
+                .Concat(DataUtility.CreateInt16((short)encodedKey.GetBytes().Length))
                 .Concat(encodedKey.GetBytes())
-                .Concat(CreateShort((short)verifyToken.Length))
+                .Concat(DataUtility.CreateInt16((short)verifyToken.Length))
                 .Concat(verifyToken).ToArray();
-            Client.Socket.BeginSend(buffer, 0, buffer.Length, SocketFlags.None, null, null);
+            client.Socket.BeginSend(buffer, 0, buffer.Length, SocketFlags.None, null, null);
         }
     }
 }
-

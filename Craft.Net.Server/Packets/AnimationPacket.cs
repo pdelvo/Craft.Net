@@ -1,5 +1,5 @@
-using System;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
@@ -16,53 +16,51 @@ namespace Craft.Net.Server.Packets
 
     public class AnimationPacket : Packet
     {
-        public int EntityId;
         public Animation Animation;
+        public int EntityId;
 
         public AnimationPacket()
         {
         }
 
-        public override byte PacketID
+        public AnimationPacket(int entityId, Animation animation)
         {
-            get
-            {
-                return 0x12;
-            }
+            EntityId = entityId;
+            Animation = animation;
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override byte PacketId
+        {
+            get { return 0x12; }
+        }
+
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             int offset = 1;
             byte animation = 0;
-            if (!TryReadInt(Buffer, ref offset, out EntityId))
+            if (!DataUtility.TryReadInt32(buffer, ref offset, out EntityId))
                 return -1;
-            if (!TryReadByte(Buffer, ref offset, out animation))
+            if (!DataUtility.TryReadByte(buffer, ref offset, out animation))
                 return -1;
             Animation = (Animation)animation;
             return offset;
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            this.EntityId = Client.Entity.Id;
-            for (int i = 0; i < 
-                 Server.GetClientsInWorld(Server.GetClientWorld(Client)).Count(); i++) // TODO: Better way
-            {
-                if (Server.Clients [i] != Client)
-                    Server.Clients [i].SendPacket(this);
-            }
-            Server.ProcessSendQueue();
+            EntityId = client.Entity.Id;
+            var clients = server.GetClientsInWorld(server.GetClientWorld(client)).Where(c => c.Entity.Id != EntityId);
+            foreach (var _client in clients)
+                _client.SendPacket(this);
+            server.ProcessSendQueue();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            return;
-            byte[] data = new byte[] { PacketID }
-                .Concat(CreateInt(EntityId))
-                .Concat(new byte[] { (byte)Animation }).ToArray();
-            Client.SendData(data);
+            byte[] data = new byte[] {PacketId}
+                .Concat(DataUtility.CreateInt32(EntityId))
+                .Concat(new byte[] {(byte)Animation}).ToArray();
+            client.SendData(data);
         }
     }
 }
-

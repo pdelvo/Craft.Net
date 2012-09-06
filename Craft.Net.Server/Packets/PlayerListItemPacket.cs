@@ -1,51 +1,48 @@
 using System;
 using System.Linq;
+using Craft.Net.Data;
 
 namespace Craft.Net.Server.Packets
 {
     public class PlayerListItemPacket : Packet
     {
-        public string PlayerName;
         public bool Online;
         public short Ping;
+        public string PlayerName;
 
         public PlayerListItemPacket()
         {
         }
 
-        public PlayerListItemPacket(string PlayerName, bool Online, short Ping)
+        public PlayerListItemPacket(string playerName, bool online, short ping)
         {
-            this.PlayerName = PlayerName;
-            this.Online = Online;
-            this.Ping = Ping;
+            this.PlayerName = playerName;
+            this.Online = online;
+            this.Ping = ping;
         }
 
-        public override byte PacketID
+        public override byte PacketId
         {
-            get
-            {
-                return 0xC9;
-            }
+            get { return 0xC9; }
         }
 
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             throw new InvalidOperationException();
         }
 
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
 
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
-            byte[] buffer = new byte[] { PacketID }
-                .Concat(CreateString(PlayerName))
-                .Concat(CreateBoolean(Online))
-                .Concat(CreateShort(Ping)).ToArray();
-            Client.SendData(buffer);
+            byte[] buffer = new[] {PacketId}
+                .Concat(DataUtility.CreateString(PlayerName))
+                .Concat(DataUtility.CreateBoolean(Online))
+                .Concat(DataUtility.CreateInt16(Ping)).ToArray();
+            client.SendData(buffer);
         }
     }
 }
-

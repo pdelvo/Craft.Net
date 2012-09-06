@@ -1,45 +1,37 @@
-using System;
+﻿using System;
 using System.Linq;
 
 namespace Craft.Net.Server.Packets
 {
     public class ServerListPingPacket : Packet
     {
-        public ServerListPingPacket()
+        public override byte PacketId
         {
+            get { return 0xFE; }
         }
 
-        public override byte PacketID
-        {
-            get
-            {
-                return 0xFE;
-            }
-        }
-
-        public override int TryReadPacket(byte[] Buffer, int Length)
+        public override int TryReadPacket(byte[] buffer, int length)
         {
             // This packet has no body
             return 1;
         }
-        
-        public override void HandlePacket(MinecraftServer Server, ref MinecraftClient Client)
+
+        public override void HandlePacket(MinecraftServer server, MinecraftClient client)
         {
-            Client.SendPacket(new DisconnectPacket(GetPingValue(Server)));
-            Server.ProcessSendQueue();
+            client.SendPacket(new DisconnectPacket(GetPingValue(server)));
+            server.ProcessSendQueue();
         }
-        
-        public override void SendPacket(MinecraftServer Server, MinecraftClient Client)
+
+        public override void SendPacket(MinecraftServer server, MinecraftClient client)
         {
             throw new InvalidOperationException();
         }
 
-        public string GetPingValue(MinecraftServer Server)
+        public string GetPingValue(MinecraftServer server)
         {
-            return Server.MotD + "§" +
-                Server.Clients.Where(c => c.IsLoggedIn).Count() + "§" +
-                Server.MaxPlayers;
+            return server.MotD + "§" +
+                   server.Clients.Count(c => c.IsLoggedIn) + "§" +
+                   server.MaxPlayers;
         }
     }
 }
-
